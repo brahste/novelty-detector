@@ -1,0 +1,29 @@
+exp_info:
+  model_name: "BinaryCNN"
+
+exp_params:
+  dataset: "ErrorMap"
+  data_path: "../../datasets/Mars_Novelty"
+  tng_dir: "train_typical"
+  val_dir: "validation_typical"
+  test_nov_dir: "test_novel/all"
+  test_typ_dir: "test_typical"
+  in_channels: 6
+  hid_dim: null
+  fc_dim: null
+  img_size: 64
+  batch_size: 16
+  LR: 0.001
+  num_workers: 4
+  # weight_decay: 0.0
+  # scheduler_gamma: 0.95
+
+trainer_params:
+  gpus: 1
+  max_nb_epochs: 5
+  max_epochs: 10
+
+logging_params:
+  save_dir: "logs/"
+  name: "BinaryCNN"
+  manual_seed: 1265
