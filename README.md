@@ -1,1 +1,1 @@
-# novelty-detector
+# Novelty Detector
