@@ -3,14 +3,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
-import torchvision
+import torchvision.utils as vutils
 import pytorch_lightning as pl
-from torchvision import transforms
+import torchvision
 import torchvision.utils as vutils
 import utils.datasets
 import utils.callbacks
 import matplotlib.pyplot as plt
 import glob
+from PIL import Image
+import numpy as np
 
 class CAE(pl.LightningModule):
 
@@ -19,6 +21,7 @@ class CAE(pl.LightningModule):
         super(CAE, self).__init__()
 
         self.p = params
+        self.H = self.p['img_size']
         # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.hold_graph = False
         
@@ -79,7 +82,10 @@ class CAE(pl.LightningModule):
         loss = self.loss_function(x_hat, x)
 
         # Error map calculation
-        emap = self.squared_error(x_hat, x)
+        #emap = self.squared_error(x_hat, x)
+
+
+
         
         # if batch_nb % 50 == 0:
         #     emap = emap[0].detach().cpu()
@@ -101,7 +107,7 @@ class CAE(pl.LightningModule):
 
         output = {
             'loss': loss,
-            'progress_bar': {'train_loss': loss, 'batch_nb': batch_nb},
+            'progress_bar': {'train_loss': loss},
             'log':          {'train_loss': loss}
         }        
         return output
@@ -111,21 +117,44 @@ class CAE(pl.LightningModule):
         x, y = x.float(), y.float()
         x_hat = self.forward(x)
         loss = self.loss_function(x_hat, x)
+
+        # error_map = self.squared_error(x_hat, x)
+        # print(error_map.min(), error_map.max())
+
+        # #error_map = (error_map.cpu() * 255)
+        # print(type(error_map), error_map.dtype)
+        # #error_map = error_map.view(self.p['batch_size'], self.H, self.H, -1)
+        # print(error_map[:,:3,:,:].shape)
+
+        #self.sample_images()
+
+        # random_idx = torch.randint(0, self.p['batch_size'], (4,))
+
+        # fig, ax = plt.subplots(4, 8)
+        # for view in range(4):
+        #     for c in range(6):
+        #     # plt.sca(ax[i])
+        #         ax[view,c].imshow(error_map[random_idx[view],c].cpu())
+        #     #ax[i].set_title('batch number ', random_idx[i])
+        #     ax[view,6].imshow(x[view,0].cpu())
+        #     ax[view,7].imshow(x_hat[view,0].cpu())
+        # plt.savefig(f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/val-errormap_B{batch_nb}_E{self.current_epoch}.png")
+        # del fig
+        #plt.show()
         
         output = {
             'val_loss': loss
         }
         return output
 
-    def validation_end(self, outputs):
+    def validation_epoch_end(self, outputs):
+        self.sample_images()
 
         avg_val_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        tensorboard_logs = {'avg_val_loss': avg_val_loss}
+        avgs = {'avg_val_loss': avg_val_loss}
+
         #self.sample_images()
-        return {'val_loss': avg_val_loss, 'log': tensorboard_logs}
-    
-    def validation_epoch_end(self, outputs):
-        pass
+        return {'val_loss': avg_val_loss, 'log': avgs}
     
     def test_step(self, batch, batch_nb):
         x, y, = batch
@@ -195,34 +224,78 @@ class CAE(pl.LightningModule):
                          torchvision.transforms.Lambda(normalize_zero_one)]
         )
         return transform
-    
+
+    # def sample_dataloader(self):
+
+    #     sample_dataloader = self.val_dataloader()
+    #     print('DATALOADER', sample_dataloader)
+
+    #     x, y = next(iter(sample_dataloader))
+    #     print(sample)
+    #     return x, y
+
     def sample_images(self):
         # Get sample reconstruction image
-        test_input, test_label = next(iter(self.sample_dataloader))
-        test_input = test_input.to(self.curr_device)
-        test_label = test_label.to(self.curr_device)
-        recons = self.model.generate(test_input, labels = test_label)
-        vutils.save_image(recons.data,
-                          f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
-                          f"recons_{self.logger.name}_{self.current_epoch}.png",
-                          normalize=True,
-                          nrow=12)
+        x, y = next(iter(self.val_dataloader()))
+        x = x.to('cuda').float()
+        y = y.to('cuda').float()
+        x_hat = self.forward(x)
+        error_map = self.squared_error(x_hat, x)
 
-        # vutils.save_image(test_input.data,
+
+
+
+        random_idx = torch.randint(0, self.p['batch_size'], (4,))
+
+        fig, ax = plt.subplots(4, 8)
+        for view in range(4):
+            for c in range(6):
+            # plt.sca(ax[i])
+                ax[view,c].imshow(error_map[random_idx[view],c].cpu())
+            #ax[i].set_title('batch number ', random_idx[i])
+            ax[view,6].imshow(x[view,0].cpu())
+            ax[view,7].imshow(x_hat[view,0].cpu())
+        plt.savefig(f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/ValErrorMap_E{self.current_epoch}.png")
+        del fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        # vutils.save_image(recons,
         #                   f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
-        #                   f"real_img_{self.logger.name}_{self.current_epoch}.png",
+        #                   f"recons_{self.logger.name}_{self.current_epoch}.png",
         #                   normalize=True,
         #                   nrow=12)
 
-        try:
-            samples = self.model.sample(144,
-                                        self.curr_device,
-                                        labels = test_label)
-            vutils.save_image(samples.cpu().data,
-                              f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
-                              f"{self.logger.name}_{self.current_epoch}.png",
-                              normalize=True,
-                              nrow=12)
-        except:
-            pass
-        del test_input, recons #, samples
+        # # vutils.save_image(test_input.data,
+        # #                   f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
+        # #                   f"real_img_{self.logger.name}_{self.current_epoch}.png",
+        # #                   normalize=True,
+        # #                   nrow=12)
+
+        # try:
+        #     samples = self.model.sample(144,
+        #                                 self.curr_device,
+        #                                 labels = test_label)
+        #     vutils.save_image(samples.cpu().data,
+        #                       f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
+        #                       f"{self.logger.name}_{self.current_epoch}.png",
+        #                       normalize=True,
+        #                       nrow=12)
+        # except:
+        #     pass
+
+
+        # del test_input, recons #, samples

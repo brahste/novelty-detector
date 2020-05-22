@@ -11,7 +11,7 @@ import torch
 import pytorch_lightning as pl
 
 # Catalog available models
-cae_models = {'KernerCAE': models.cae.CAE}
+cae_models = {'CAE': models.cae.CAE}
 #cnn_models = {'BinaryCNN': models.BinaryCNN}
 
 parser = argparse.ArgumentParser(description='Runs novelty detection related experiments')

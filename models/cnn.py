@@ -74,6 +74,8 @@ class BinaryCNN(pl.LightningModule):
         return x
 
     def training_step(self, batch, batch_nb):
+        print(batch_nb, 'train')
+
         
         x, y = batch
         x, y = x.float(), y.float().unsqueeze(1)
@@ -101,6 +103,7 @@ class BinaryCNN(pl.LightningModule):
         }        
 
     def validation_step(self, batch, batch_nb):
+        print(batch_nb, 'val')
         
         x, y = batch
         x, y = x.float(), y.float().unsqueeze(1)
@@ -114,19 +117,38 @@ class BinaryCNN(pl.LightningModule):
         #self.logger.experiment.log({'metrics': metrics['accuracy']})
 
         return {
-            'val_loss': loss,
+            'val_loss': loss, 'metrics': metrics
             #'progress_bar': {'val_loss': loss, 'batch_nb': batch_nb},
-            'log': {'val_loss': loss, 'metrics': metrics}
+            #'log': {'val_loss': loss, 'metrics': metrics}
         }
 
     def validation_epoch_end(self, outputs):
+        '''outputs is an aray (or I guess.. tensor) of dictionaries, one for each batch'''
+        avg_val_loss = torch.stack([x['val_loss'] for x in outputs]).mean() 
+        #print(outputs)
 
-        avg_val_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+        avgs = {}
+        avgs['avg_val_loss'] = avg_val_loss
+
+        for batch_nb in outputs:
+            for metr in batch_nb['metrics']:
+
+                avgs['avg_'+metr] = batch_nb['metrics'][metr]
+
+
+            # metrics = batch_result['metrics']
+            # metrics['avg_val_loss'] = avg_val_loss
+
+            #counts = batch_result['counts']
+            #precision = batch_result['precision']
+
+            #print(metrics, '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
         #self.sample_images()
         return {
             'avg_val_loss': avg_val_loss,
-            'log': {'avg_val_loss': avg_val_loss}
+            #'log': {'avg_val_loss': avg_val_loss, 'metrics': metrics}
+            'log': avgs
         }
 
     # def training_epoch_end(self, outputs):

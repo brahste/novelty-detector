@@ -61,7 +61,7 @@ trainer = pl.Trainer(default_save_path=f'{logger.save_dir}',
                 	# callbacks=callback,
 					min_nb_epochs=1,
                 	logger=logger,
-                	log_save_interval=5,
+                	log_save_interval=50,
 	                num_sanity_val_steps=5,
 	                **config['trainer_params'])
 

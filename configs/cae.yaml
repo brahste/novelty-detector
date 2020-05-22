@@ -24,5 +24,6 @@ trainer_params:
 
 logging_params:
   save_dir: "logs/"
+  img_save_dir: "images/"
   name: "KernerCAE"
   manual_seed: 1265
