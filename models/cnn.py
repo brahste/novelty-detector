@@ -38,7 +38,9 @@ class BinaryCNN(pl.LightningModule):
             modules.append(
                 nn.Sequential(
                     nn.Conv2d(self.in_channels, hid, kernel_size=5, padding=2),
-                    nn.MaxPool2d(2, 2)
+                    nn.LeakyReLU(1e-2),               
+                    nn.MaxPool2d(2, 2),
+                    nn.BatchNorm2d(hid)
                 )
             )
             self.in_channels = hid
@@ -74,13 +76,26 @@ class BinaryCNN(pl.LightningModule):
         return x
 
     def training_step(self, batch, batch_nb):
-        print(batch_nb, 'train')
+        #print(batch_nb, 'train')
 
         
         x, y = batch
+        
+        #print('train max min: ', x.max(), x.min())
+        
         x, y = x.float(), y.float().unsqueeze(1)
         y_hat = self.forward(x)
         loss = self.loss_function(y_hat, y)
+        
+        '''TODO: 
+            1) Normalize the errormaps before passing them through the network.
+            2) Analyze differences in using sigmoid vs softmax squashing functions.
+        '''
+        
+        # print('y', y)
+        # print('y_hat: ', y_hat[0])
+        # print('softmax: ', F.softmax(y_hat[0]))
+        # print('sigmoid: ', torch.sigmoid(y_hat[0]))
         
         #print(len(x))
 
@@ -103,8 +118,66 @@ class BinaryCNN(pl.LightningModule):
         }        
 
     def validation_step(self, batch, batch_nb):
-        print(batch_nb, 'val')
+        #print(batch_nb, 'val')
         
+        x, y = batch
+        x, y = x.float(), y.float().unsqueeze(1)
+        #print(type(x))
+        y_hat = self.forward(x)
+        loss = self.loss_function(y_hat, y)
+
+        #print('y_hat', F.softmax(y_hat), 'y' ,y)
+
+        metrics = self.performance_metrics(torch.sigmoid(y_hat), y, 0.5)
+        #self.logger.experiment.log({'metrics': metrics['accuracy']})
+
+        return {
+            'val_loss': loss, 'metrics': metrics
+            #'progress_bar': {'val_loss': loss, 'batch_nb': batch_nb},
+            #'log': {'val_loss': loss, 'metrics': metrics}
+        }
+
+    def validation_epoch_end(self, outputs):
+        '''outputs is an aray (or I guess.. tensor) of dictionaries, one for each batch'''
+        avg_val_loss = torch.stack([x['val_loss'] for x in outputs]).mean() 
+        #print(outputs)
+
+        avgs = {}
+        avgs['avg_val_loss'] = avg_val_loss
+
+        try:
+            for batch_nb in outputs:
+                for metr in batch_nb['metrics']:
+
+                    avgs['avg_'+metr] = batch_nb['metrics'][metr]
+        except:
+            pass
+
+        #self.sample_images()
+        return {
+            'avg_val_loss': avg_val_loss,
+            #'log': {'avg_val_loss': avg_val_loss, 'metrics': metrics}
+            'log': avgs
+        }
+
+    # def training_epoch_end(self, outputs):
+    #     avg_loss = torch.stack()
+    
+    def configure_dataset(self, cae):
+        
+        dataset = utils.datasets.ErrorMapDataset(
+                        cae,
+                        root = self.p['data_path'],
+                        dirs = [self.p['test_nov_dir'], self.p['test_typ_dir']],
+                        transform = self.data_transforms()
+        )
+        
+        _, self.test_dataset = torch.utils.data.random_split(dataset, [660, len(dataset)-660])
+        self.train_dataset, self.val_dataset = torch.utils.data.random_split(_, [600, 60])
+
+        return self.train_dataset, self.val_dataset, self.test_dataset
+    
+    def test_step(self, batch, batch_nb):
         x, y = batch
         x, y = x.float(), y.float().unsqueeze(1)
         #print(type(x))
@@ -122,82 +195,6 @@ class BinaryCNN(pl.LightningModule):
             #'log': {'val_loss': loss, 'metrics': metrics}
         }
 
-    def validation_epoch_end(self, outputs):
-        '''outputs is an aray (or I guess.. tensor) of dictionaries, one for each batch'''
-        avg_val_loss = torch.stack([x['val_loss'] for x in outputs]).mean() 
-        #print(outputs)
-
-        avgs = {}
-        avgs['avg_val_loss'] = avg_val_loss
-
-        for batch_nb in outputs:
-            for metr in batch_nb['metrics']:
-
-                avgs['avg_'+metr] = batch_nb['metrics'][metr]
-
-
-            # metrics = batch_result['metrics']
-            # metrics['avg_val_loss'] = avg_val_loss
-
-            #counts = batch_result['counts']
-            #precision = batch_result['precision']
-
-            #print(metrics, '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-        #self.sample_images()
-        return {
-            'avg_val_loss': avg_val_loss,
-            #'log': {'avg_val_loss': avg_val_loss, 'metrics': metrics}
-            'log': avgs
-        }
-
-    # def training_epoch_end(self, outputs):
-    #     avg_loss = torch.stack()
-
-    
-    # def train_dataloader(self):
-    #     return torch.utils.data.DataLoader(
-    #                     self.train_dataset,
-    #                     batch_size = self.p['batch_size'],
-    #                     shuffle = True, 
-    #                     num_workers = self.p['num_workers']
-    #     )
-    
-    # def val_dataloader(self):
-    #     return torch.utils.data.DataLoader(
-    #                     self.val_dataset,
-    #                     batch_size = self.p['batch_size'],
-    #                     num_workers = self.p['num_workers']
-    #     )
-    
-    def test_dataloader(self):
-        return torch.utils.data.DataLoader(
-                        self.test_dataset,
-                        batch_size = 1,
-                        num_workers = self.p['num_workers']
-        )
-    
-    def configure_dataset(self, cae):
-        
-        dataset = utils.datasets.ErrorMapDataset(
-                        cae,
-                        root = self.p['data_path'],
-                        dirs = [self.p['test_nov_dir'], self.p['test_typ_dir']],
-                        transform = self.data_transforms()
-        )
-        
-        _, self.test_dataset = torch.utils.data.random_split(dataset, [660, len(dataset)-660])
-        self.train_dataset, self.val_dataset = torch.utils.data.random_split(_, [600, 60])
-
-        return self.train_dataset, self.val_dataset, self.test_dataset
-    
-    def test_step(self, batch, batch_nb):
-        x, y, = batch
-        x_hat = self.forward(x)
-        loss = self.loss_function(x_hat, x)
-        
-        return  {'loss': loss}
-
     def test_epoch_end(self, outputs):
         pass
 
@@ -209,11 +206,15 @@ class BinaryCNN(pl.LightningModule):
     
     def data_transforms(self):
         
-        normalize_zero_one = lambda inp, bit_depth=8: inp / (2**bit_depth)
+        #normalize_zero_one = lambda inp, bit_depth=8: inp / (2**bit_depth)
+        
+        # transform = torchvision.transforms.Compose(
+        #                 [torchvision.transforms.ToTensor(),
+        #                  torchvision.transforms.Lambda(self.normalize_error_map)]
+        # )
         
         transform = torchvision.transforms.Compose(
-                        [torchvision.transforms.ToTensor(),
-                         torchvision.transforms.Lambda(normalize_zero_one)]
+                [torchvision.transforms.ToTensor()]
         )
         return transform
 
@@ -227,10 +228,18 @@ class BinaryCNN(pl.LightningModule):
         plt.imshow(x)
         plt.savefig('images/saved.png')
 
-    def performance_metrics(self, y_hat, y):
+    def performance_metrics(self, y_hat, y, threshold):
+        
+        novelties = (y_hat > threshold).to(torch.bool)
+        labels = y.to(torch.bool)
+        
+        #print(y_hat, y)
+        
+        #print(novelties, 'l' ,labels)
+
         '''0 is typical, 1 is novel, also works with boolean arrays'''
         counts = {'TP': 0, 'FP': 0, 'FN': 0, 'TN': 0}
-        for quadrant in zip(y_hat, y):
+        for quadrant in zip(novelties, labels):
             
             if quadrant == (1, 1): # TP
                 counts['TP'] += 1
@@ -240,16 +249,21 @@ class BinaryCNN(pl.LightningModule):
                 counts['FP'] += 1
             elif quadrant == (0, 0): # TN
                 counts['TN'] += 1
-                
-        precision = counts['TP'] / (counts['TP'] + counts['FP'])
-        recall    = counts['TP'] / (counts['TP'] + counts['FN'])
-        accuracy  = (counts['TP'] + counts['TN']) / len(y)
-        f1score   = (2 * precision * recall) / (precision + recall)
-        
-        return {
-            'counts': counts,
-            'precision': precision,
-            'recall': recall,
-            'accuracy': accuracy,
-            'f1score': f1score
-        }
+         
+#        print(counts)
+
+        try:   
+            precision = counts['TP'] / (counts['TP'] + counts['FP'])
+            recall    = counts['TP'] / (counts['TP'] + counts['FN'])
+            accuracy  = (counts['TP'] + counts['TN']) / len(y)
+            f1score   = (2 * precision * recall) / (precision + recall)
+            
+            return {
+                'counts': counts,
+                'precision': precision,
+                'recall': recall,
+                'accuracy': accuracy,
+                'f1score': f1score
+            }
+        except:
+            return 'Metrics calculation failed'

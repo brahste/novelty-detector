@@ -11,7 +11,7 @@ exp_params:
   in_channels: 6
   hid_dim: [12,8,3]
   img_size: 64
-  batch_size: 32
+  batch_size: 64
   LR: 0.001
   num_workers: 4
   # weight_decay: 0.0

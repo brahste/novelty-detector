@@ -148,6 +148,7 @@ class CAE(pl.LightningModule):
         return output
 
     def validation_epoch_end(self, outputs):
+
         self.sample_images()
 
         avg_val_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
@@ -242,21 +243,54 @@ class CAE(pl.LightningModule):
         x_hat = self.forward(x)
         error_map = self.squared_error(x_hat, x)
 
+        #random_idx = torch.randint(0, self.p['batch_size'], (4,))
+        select = [28, 32]
 
+        fig, ax = plt.subplots(2, 8, figsize=(20,10))
+        for view in range(2):
+            emap = self.clean_batch_for_display(select[view], x, x_hat, error_map)
 
-
-        random_idx = torch.randint(0, self.p['batch_size'], (4,))
-
-        fig, ax = plt.subplots(4, 8)
-        for view in range(4):
-            for c in range(6):
+            for c in range(2,8):
             # plt.sca(ax[i])
-                ax[view,c].imshow(error_map[random_idx[view],c].cpu())
+                ax[view,c].imshow(emap[...,c-2])
             #ax[i].set_title('batch number ', random_idx[i])
-            ax[view,6].imshow(x[view,0].cpu())
-            ax[view,7].imshow(x_hat[view,0].cpu())
+            ax[view,0].imshow(x[select[view],2].cpu())
+            ax[view,1].imshow(x_hat[select[view],2].cpu())
         plt.savefig(f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/ValErrorMap_E{self.current_epoch}.png")
         del fig
+
+        # fig, ax = plt.subplots(4, 8)
+        # for view in range(4):
+        #     for c in range(2,8):
+        #     # plt.sca(ax[i])
+        #         ax[view,c].imshow(error_map[random_idx[view],c].cpu())
+        #     #ax[i].set_title('batch number ', random_idx[i])
+        #     ax[view,0].imshow(x[view,0].cpu())
+        #     ax[view,1].imshow(x_hat[view,0].cpu())
+        # plt.savefig(f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/ValErrorMap_E{self.current_epoch}.png")
+        # del fig
+
+    def clean_batch_for_display(self, b: int, x, x_hat, error_map):
+
+        emap = error_map[b].cpu()
+
+        maxs = torch.max(torch.max(emap, dim=1)[0], dim=1)[0]
+        maxs = maxs[...,None,None]
+
+
+        # print(error_map[b].shape)
+
+        # maxs, max_idxs = torch.max(error_map[b], dim=1)
+        # maxs, max_idxs = torch.max(maxs, dim=1)
+        # print(maxs.shape)
+
+        # Error map
+        norm_emap = emap / maxs
+
+        return norm_emap.permute(1, 2, 0)
+
+        # return emap.permute(1, 2, 0)
+
 
 
 

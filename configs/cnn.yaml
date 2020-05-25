@@ -12,7 +12,7 @@ exp_params:
   hid_dim: null
   fc_dim: null
   img_size: 64
-  batch_size: 16
+  batch_size: 8
   LR: 0.001
   num_workers: 4
   # weight_decay: 0.0
@@ -21,7 +21,7 @@ exp_params:
 trainer_params:
   gpus: 1
   max_nb_epochs: 5
-  max_epochs: 10
+  max_epochs: 20
 
 logging_params:
   save_dir: "logs/"

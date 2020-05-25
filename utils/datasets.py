@@ -86,5 +86,25 @@ class ErrorMapDataset(torch.utils.data.Dataset):
         #model.to(torch.device('cpu'))
         x_hat = model(x.unsqueeze(0))
         error_map = squared_error(x_hat, x)
+        error_map = self.normalize_error_map(error_map)
         
         return error_map.squeeze()
+    
+    def normalize_error_map(self, error_map):
+
+        maxs = torch.max(torch.max(error_map, dim=2)[0], dim=2)[0]
+        maxs = maxs[...,None,None]
+
+
+        # print(error_map[b].shape)
+
+        # maxs, max_idxs = torch.max(error_map[b], dim=1)
+        # maxs, max_idxs = torch.max(maxs, dim=1)
+        # print(maxs.shape)
+
+        # Error map
+        normalized = error_map / maxs
+
+        return normalized
+
+        # return emap.permute(1, 2, 0)
