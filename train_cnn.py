@@ -28,7 +28,7 @@ with open(str(args.filename), 'r') as f:
 device = torch.device('cpu')
 with torch.no_grad():
 	cae = models.cae.CAE(config['exp_params'])
-	cae.load_state_dict(torch.load('logs/CAE_.pt',map_location=device))
+	cae.load_state_dict(torch.load('logs/CAE_.pt', map_location=device))
 	print('cae device', cae)
 
 print(config['exp_params'])
@@ -45,7 +45,7 @@ logger = pl.loggers.TestTubeLogger(
 )
 
 train = True
-test = False
+test = True
 
 train_set, val_set, test_set = cnn.configure_dataset(cae)
 
@@ -77,7 +77,7 @@ if train:
 if test:
     test_loader = torch.utils.data.DataLoader(
                             test_set,
-                            batch_size=1,
+                            batch_size=config['exp_params']['batch_size'],
                             num_workers=config['exp_params']['num_workers']
     )
 

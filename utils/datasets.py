@@ -5,6 +5,7 @@
 import torch, os
 import numpy as np
 from typing import List
+import matplotlib.pyplot as plt
 
 def squared_error(x_hat, x):
     return (x_hat - x)**2
@@ -66,8 +67,18 @@ class ErrorMapDataset(torch.utils.data.Dataset):
             if self.transform:
                 x = self.transform(x) 
             x = x.float()
+            
+            # plt.imshow(x.squeeze().permute(1, 2, 0)[...,2])
+            # plt.show()
+            # print('x: ', torch.unique(x/256))
+            
             error_map = self.get_error_map(self.model, x)
-            return error_map.squeeze(), label
+            
+            # plt.imshow(error_map.permute(1, 2, 0)[...,0])
+            # plt.show()
+            # print('emap: ', torch.unique(error_map))
+            
+            return error_map, label
             
     def collect_sets(self):
         self.img_files = []
@@ -75,16 +86,16 @@ class ErrorMapDataset(torch.utils.data.Dataset):
             for f in os.listdir(os.path.join(self.root, path)):
                 file = os.path.join(path, f)
                 self.img_files.append( (file, i) )
-                
-    def to_onehot(self, class_num):
-        label = torch.zeros(2)
-        label[class_num] = 1
-        return label
-    
+
     def get_error_map(self, model, x):
         
         #model.to(torch.device('cpu'))
         x_hat = model(x.unsqueeze(0))
+        
+        # plt.imshow(x_hat.squeeze().permute(1, 2, 0)[...,2])
+        # plt.show()
+        # print('x_hat: ', torch.unique(x_hat))
+        
         error_map = squared_error(x_hat, x)
         error_map = self.normalize_error_map(error_map)
         
@@ -92,7 +103,9 @@ class ErrorMapDataset(torch.utils.data.Dataset):
     
     def normalize_error_map(self, error_map):
 
+        # Grab the max pixel values for each channel
         maxs = torch.max(torch.max(error_map, dim=2)[0], dim=2)[0]
+        # Equivalent to double unsqueeze
         maxs = maxs[...,None,None]
 
 
@@ -102,9 +115,7 @@ class ErrorMapDataset(torch.utils.data.Dataset):
         # maxs, max_idxs = torch.max(maxs, dim=1)
         # print(maxs.shape)
 
-        # Error map
-        normalized = error_map / maxs
-
-        return normalized
+        # Normalized error map
+        return error_map / maxs
 
         # return emap.permute(1, 2, 0)

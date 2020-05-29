@@ -18,22 +18,16 @@ class BinaryCNN(pl.LightningModule):
         super(BinaryCNN, self).__init__()
         
         self.p = params
-        #self.cae = autoencoder
         self.in_channels = int(self.p['in_channels'])
         self.H = self.p['img_size']
         self.loss_function = nn.BCEWithLogitsLoss()
-        #self.prepare_data()
-        
-        #print(type(self.p['hid_dim']))
-        
+
         modules = []
         if self.p['hid_dim'] is None:
             self.hid_dims = [32, 64]
         else:
             self.hid_dims = self.p['hid_dim']
-        #self.hid_dims = int(self.p['hid_dim'])
-        #print(type(self.hid_dims))
-        
+
         for hid in self.hid_dims:
             modules.append(
                 nn.Sequential(
@@ -45,203 +39,176 @@ class BinaryCNN(pl.LightningModule):
             )
             self.in_channels = hid
             self.H /= 2
-            #print(self.H)
-            #print('New in chans: ', self.in_channels)
             
+        # Construct convolutional section of network
         self.conv = nn.Sequential(*modules)
         
         modules = []
-        
         if self.p['fc_dim'] is None:
             self.fc_dims = [512]
         else:
             self.fc_dims = self.p['fc_dim']
             
         for fc in self.fc_dims:
-            #print('num flat chans: ', self.in_channels * int(self.H)**2)
-            modules.append(nn.Linear(self.in_channels * int(self.H)**2, fc))
+            modules.append(
+                nn.Sequential(
+                    nn.Linear(self.in_channels * int(self.H)**2, fc),
+                    nn.LeakyReLU(1e-2),
+                    nn.BatchNorm1d(fc)
+                )
+            )
             self.in_channels = fc
             
+        # Construct fully connected section of network
         self.fc = nn.Sequential(*modules)
         self.output = nn.Linear(self.in_channels, 1)
     
     def forward(self, x):
-        #print('type', type(x))
         x = F.relu( self.conv(x) )
-        #print('After conv. shape: ', x.shape)
-        x = torch.flatten(x, start_dim=1) # Start dim 1 to preserve batches
-        #print('After fc shape: ', x.shape)
+        x = torch.flatten(x, start_dim=1)  # dim 1 preserves batches
         x = F.relu( self.fc(x) )
-        x = self.output(x)
-        return x
+        return self.output(x)
+
 
     def training_step(self, batch, batch_nb):
-        #print(batch_nb, 'train')
-
-        
         x, y = batch
-        
-        #print('train max min: ', x.max(), x.min())
-        
         x, y = x.float(), y.float().unsqueeze(1)
         y_hat = self.forward(x)
         loss = self.loss_function(y_hat, y)
-        
-        '''TODO: 
-            1) Normalize the errormaps before passing them through the network.
-            2) Analyze differences in using sigmoid vs softmax squashing functions.
-        '''
-        
-        # print('y', y)
-        # print('y_hat: ', y_hat[0])
-        # print('softmax: ', F.softmax(y_hat[0]))
-        # print('sigmoid: ', torch.sigmoid(y_hat[0]))
-        
-        #print(len(x))
-
-        # if batch_nb % 10 == 0:
-        #     self.sample_image_from_batch(x, y, y_hat)
-
-        #self.logger.experiment.log({'loss_blah': loss})
-
         return {
             'loss': loss,
-            #'progress_bar': {'train_loss': loss, 'batch_nb': batch_nb},
             'log': {'train_loss': loss, 'batch_nb': batch_nb}
         }
 
     def training_epoch_end(self, outputs):
-        avg_val_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        avg_train_loss = torch.stack([x['loss'] for x in outputs]).mean()
         return {
-            'avg_train_loss': avg_val_loss,
-            'log': {'avg_train_loss': avg_val_loss}
+            'avg_train_loss': avg_train_loss,
+            'log': {'avg_train_loss': avg_train_loss}
         }        
 
     def validation_step(self, batch, batch_nb):
-        #print(batch_nb, 'val')
-        
         x, y = batch
         x, y = x.float(), y.float().unsqueeze(1)
-        #print(type(x))
         y_hat = self.forward(x)
         loss = self.loss_function(y_hat, y)
 
-        #print('y_hat', F.softmax(y_hat), 'y' ,y)
-
+        # Grab performance metrics with set threshold
         metrics = self.performance_metrics(torch.sigmoid(y_hat), y, 0.5)
-        #self.logger.experiment.log({'metrics': metrics['accuracy']})
-
         return {
             'val_loss': loss, 'metrics': metrics
-            #'progress_bar': {'val_loss': loss, 'batch_nb': batch_nb},
-            #'log': {'val_loss': loss, 'metrics': metrics}
         }
 
     def validation_epoch_end(self, outputs):
-        '''outputs is an aray (or I guess.. tensor) of dictionaries, one for each batch'''
+
+        self.visualize_results()
+
+        logs = self.handle_metrics(outputs)
+        # Handle remaining metrics
         avg_val_loss = torch.stack([x['val_loss'] for x in outputs]).mean() 
-        #print(outputs)
-
-        avgs = {}
-        avgs['avg_val_loss'] = avg_val_loss
-
-        try:
-            for batch_nb in outputs:
-                for metr in batch_nb['metrics']:
-
-                    avgs['avg_'+metr] = batch_nb['metrics'][metr]
-        except:
-            pass
-
-        #self.sample_images()
+        logs['avg_val_loss'] = avg_val_loss
         return {
             'avg_val_loss': avg_val_loss,
-            #'log': {'avg_val_loss': avg_val_loss, 'metrics': metrics}
-            'log': avgs
+            'log': logs
         }
 
-    # def training_epoch_end(self, outputs):
-    #     avg_loss = torch.stack()
+    def test_step(self, batch, batch_nb):
+        x, y = batch
+        x, y = x.float(), y.float().unsqueeze(1)
+        y_hat = self.forward(x)
+        loss = self.loss_function(y_hat, y)
+
+        metrics = self.performance_metrics(torch.sigmoid(y_hat), y, 0.5)
+        return {
+            'test_loss': loss, 'metrics': metrics
+        }
+
+    def test_epoch_end(self, outputs):
+
+        self.visualize_results()
+
+        logs = self.handle_metrics(outputs)        
+        # Handle remain metrics
+        avg_test_loss = torch.stack([x['test_loss'] for x in outputs]).mean() 
+        logs['avg_test_loss'] = avg_test_loss
+        return {
+            'avg_test_loss': avg_test_loss,
+            'log': logs
+        }
+
+    def handle_metrics(self, outputs):
+        logs = {}
+        counts = {}
+        # To keep track of which batches return 'Metrics calc failed'
+        # assign the variable less, which is used to remove the
+        # number of failed batches from the divisor in when calculating
+        # the mean.
+        less = 0
+
+        for val_batch in outputs:
+            v = val_batch['metrics']
+            if v == 'Metrics calculation failed':
+                less += 1
+            else:
+                for metr in v:
+                    if metr == 'counts':
+                        for q in v[metr]:
+                            if q in counts:
+                                counts[q] += v[metr][q]
+                            else:
+                                counts[q] = v[metr][q]
+                    else:
+                        if 'avg_'+metr in logs:
+                            logs['avg_'+metr] += v[metr]
+                        else:
+                            logs['avg_'+metr] = v[metr]
+        logs = {key: logs[key] / (len(outputs) - less) for key in set(logs)}
+        # Add counts dictionary to log output
+        logs['counts'] = counts
+        return logs
     
     def configure_dataset(self, cae):
-        
+        '''Configures the Error Map dataset, function is called in 
+        'train_cnn.py' before declaring the dataloaders
+        '''
         dataset = utils.datasets.ErrorMapDataset(
                         cae,
                         root = self.p['data_path'],
-                        dirs = [self.p['test_nov_dir'], self.p['test_typ_dir']],
+                        dirs = [self.p['test_typ_dir'], self.p['test_nov_dir']],
                         transform = self.data_transforms()
         )
-        
+        # Consider building a dynamic dataset splitter in future
         _, self.test_dataset = torch.utils.data.random_split(dataset, [660, len(dataset)-660])
         self.train_dataset, self.val_dataset = torch.utils.data.random_split(_, [600, 60])
 
         return self.train_dataset, self.val_dataset, self.test_dataset
-    
-    def test_step(self, batch, batch_nb):
-        x, y = batch
-        x, y = x.float(), y.float().unsqueeze(1)
-        #print(type(x))
-        y_hat = self.forward(x)
-        loss = self.loss_function(y_hat, y)
-
-        #print('y_hat', F.softmax(y_hat), 'y' ,y)
-
-        metrics = self.performance_metrics(F.softmax(y_hat), y)
-        #self.logger.experiment.log({'metrics': metrics['accuracy']})
-
-        return {
-            'val_loss': loss, 'metrics': metrics
-            #'progress_bar': {'val_loss': loss, 'batch_nb': batch_nb},
-            #'log': {'val_loss': loss, 'metrics': metrics}
-        }
-
-    def test_epoch_end(self, outputs):
-        pass
 
     def configure_optimizers(self):
         opt = torch.optim.Adam(self.parameters(), lr=self.p['LR'])
-        
-        # Learn how to build learning rate schedulers
+        # Learn how to build learning rate schedulers...
         return opt
     
     def data_transforms(self):
+        '''Composition of transforms used when configuring the dataset
+        '''
+        normalize_zero_one = lambda inp, bit_depth=8: inp / (2**bit_depth)
         
-        #normalize_zero_one = lambda inp, bit_depth=8: inp / (2**bit_depth)
-        
-        # transform = torchvision.transforms.Compose(
-        #                 [torchvision.transforms.ToTensor(),
-        #                  torchvision.transforms.Lambda(self.normalize_error_map)]
-        # )
-        
-        transform = torchvision.transforms.Compose(
-                [torchvision.transforms.ToTensor()]
+        return torchvision.transforms.Compose(
+                        [torchvision.transforms.ToTensor(),
+                         torchvision.transforms.Lambda(normalize_zero_one)]
         )
-        return transform
-
-    def sample_image_from_batch(self, x, y, y_hat):
-
-        grab = torch.randint(0, len(x), (1,))
-
-        x = x[grab].squeeze()           # Select a random batch element
-        x = x.permute(1, 2, 0).cpu()    # prepare for viewing image viewing
-        x = x[:,:,2]                    # Select just red channel
-        plt.imshow(x)
-        plt.savefig('images/saved.png')
 
     def performance_metrics(self, y_hat, y, threshold):
         
+        # Threshold and convert to boolean arrays
         novelties = (y_hat > threshold).to(torch.bool)
-        labels = y.to(torch.bool)
+        labels    = y.to(torch.bool)
         
-        #print(y_hat, y)
-        
-        #print(novelties, 'l' ,labels)
-
-        '''0 is typical, 1 is novel, also works with boolean arrays'''
+        # Convention: 0 -> typical, 1 -> novel
         counts = {'TP': 0, 'FP': 0, 'FN': 0, 'TN': 0}
         for quadrant in zip(novelties, labels):
             
-            if quadrant == (1, 1): # TP
+            if quadrant   == (1, 1): # TP
                 counts['TP'] += 1
             elif quadrant == (0, 1): # FN
                 counts['FN'] += 1
@@ -249,9 +216,9 @@ class BinaryCNN(pl.LightningModule):
                 counts['FP'] += 1
             elif quadrant == (0, 0): # TN
                 counts['TN'] += 1
-         
-#        print(counts)
 
+        # Early in training sometimes poor performance raises divide by
+        # zero error.
         try:   
             precision = counts['TP'] / (counts['TP'] + counts['FP'])
             recall    = counts['TP'] / (counts['TP'] + counts['FN'])
@@ -259,11 +226,46 @@ class BinaryCNN(pl.LightningModule):
             f1score   = (2 * precision * recall) / (precision + recall)
             
             return {
-                'counts': counts,
-                'precision': precision,
-                'recall': recall,
-                'accuracy': accuracy,
-                'f1score': f1score
+                'counts':    counts,
+                'precision': torch.tensor(precision),
+                'recall':    torch.tensor(recall),
+                'accuracy':  torch.tensor(accuracy),
+                'f1score':   torch.tensor(f1score)
             }
         except:
             return 'Metrics calculation failed'
+
+    def visualize_results(self):
+        # Get sample reconstruction image
+        x, y = next(iter(self.val_dataloader()))
+        x = x.to('cuda').float()
+        y = y.to('cuda').float()
+        y_hat = self.forward(x)
+
+        # Pick random batch elements to sample
+        pick = torch.randint(0, len(x), (4,))
+
+        fig, ax = plt.subplots(1, 4)
+        for i in range(4):
+            emap, y_pick, y_hat_pick = self.clean_batch_for_display(pick[i], x, y, y_hat)
+
+            ax[i].imshow(emap[...,2])
+            ax[i].text(0, 0, 
+                       f'Actual: {y_pick:.2f}, Predicted: {y_hat_pick:.2f}',
+                       fontsize=6)
+        plt.savefig(f'{self.logger.save_dir}{self.logger.name}/'
+                    + f'version_{self.logger.version}/'
+                    + f'CnnOutputVis_E{self.current_epoch}.png')
+        del fig
+
+    def clean_batch_for_display(self, b: int, x, y, y_hat):
+        '''For casting batchs to the cpu and grabing the specified element
+        from the batch
+        '''
+        emap = x[b].cpu()
+        y_pick = y.view(-1)[b].cpu()
+        
+        y_hat = torch.sigmoid(y_hat)
+        y_hat_pick = y_hat.view(-1)[b].cpu()
+        
+        return emap.permute(1, 2, 0), y_pick.item(), y_hat_pick.item()

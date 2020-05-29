@@ -10,8 +10,6 @@ import torchvision.utils as vutils
 import utils.datasets
 import utils.callbacks
 import matplotlib.pyplot as plt
-import glob
-from PIL import Image
 import numpy as np
 
 class CAE(pl.LightningModule):
@@ -80,97 +78,40 @@ class CAE(pl.LightningModule):
         x, y = x.float(), y.float()
         x_hat = self.forward(x)
         loss = self.loss_function(x_hat, x)
-
-        # Error map calculation
-        #emap = self.squared_error(x_hat, x)
-
-
-
-        
-        # if batch_nb % 50 == 0:
-        #     emap = emap[0].detach().cpu()
-        #     emap = emap.squeeze()
-        #     print(emap.shape)
-        #     emap = emap.permute(1, 2, 0)
-        #     plt.imshow(emap[:,:,2])
-        #     plt.show()
-            
-        #     x = x[0].detach().cpu().squeeze()
-        #     x = x.permute(1, 2, 0)
-        #     plt.imshow(x[:,:,2])
-        #     plt.show()
-            
-        #     x_hat = x_hat[0].detach().cpu().squeeze()
-        #     x_hat = x_hat.permute(1, 2, 0)
-        #     plt.imshow(x_hat[:,:,2])
-        #     plt.show()
-
-        output = {
+        return {
             'loss': loss,
-            'progress_bar': {'train_loss': loss},
             'log':          {'train_loss': loss}
         }        
-        return output
 
     def validation_step(self, batch, batch_nb):
         x, y = batch
         x, y = x.float(), y.float()
         x_hat = self.forward(x)
         loss = self.loss_function(x_hat, x)
-
-        # error_map = self.squared_error(x_hat, x)
-        # print(error_map.min(), error_map.max())
-
-        # #error_map = (error_map.cpu() * 255)
-        # print(type(error_map), error_map.dtype)
-        # #error_map = error_map.view(self.p['batch_size'], self.H, self.H, -1)
-        # print(error_map[:,:3,:,:].shape)
-
-        #self.sample_images()
-
-        # random_idx = torch.randint(0, self.p['batch_size'], (4,))
-
-        # fig, ax = plt.subplots(4, 8)
-        # for view in range(4):
-        #     for c in range(6):
-        #     # plt.sca(ax[i])
-        #         ax[view,c].imshow(error_map[random_idx[view],c].cpu())
-        #     #ax[i].set_title('batch number ', random_idx[i])
-        #     ax[view,6].imshow(x[view,0].cpu())
-        #     ax[view,7].imshow(x_hat[view,0].cpu())
-        # plt.savefig(f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/val-errormap_B{batch_nb}_E{self.current_epoch}.png")
-        # del fig
-        #plt.show()
-        
-        output = {
+        return {
             'val_loss': loss
         }
-        return output
 
     def validation_epoch_end(self, outputs):
-
         self.sample_images()
 
         avg_val_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        avgs = {'avg_val_loss': avg_val_loss}
-
-        #self.sample_images()
-        return {'val_loss': avg_val_loss, 'log': avgs}
+        return {
+            'val_loss': avg_val_loss, 
+            'log': {'avg_val_loss': avg_val_loss}
+        }
     
     def test_step(self, batch, batch_nb):
         x, y, = batch
         x, y = x.float(), y.float()
         x_hat = self.forward(x)
         loss = self.loss_function(x_hat, x)
-        
-        return  {'loss': loss}
-
-    def test_epoch_end(self, outputs):
-        pass
+        return  {
+            'loss': loss
+        }
 
     def configure_optimizers(self):
         opt = torch.optim.Adam(self.parameters(), lr=self.p['LR'])
-        
         # Learn how to build learning rate schedulers
         return opt
 
@@ -185,14 +126,13 @@ class CAE(pl.LightningModule):
             raise ValueError('Undefined dataset type')
 
         self.num_train_imgs = len(dataset)
-        loader = torch.utils.data.DataLoader(
+        return torch.utils.data.DataLoader(
                         dataset, 
                         batch_size = self.p['batch_size'], 
                         shuffle = True, 
                         drop_last = True,
                         num_workers = self.p['num_workers']
         )
-        return loader
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
 
@@ -206,13 +146,13 @@ class CAE(pl.LightningModule):
         else:
             raise ValueError('Undefined dataset type')
     
-        loader = torch.utils.data.DataLoader(
+        return torch.utils.data.DataLoader(
                         dataset, 
                         batch_size = self.p['batch_size'], 
                         drop_last = True,
                         num_workers = self.p['num_workers']
         )
-        return loader
+
     def test_dataloader(self):
         pass
 
@@ -220,20 +160,10 @@ class CAE(pl.LightningModule):
         
         normalize_zero_one = lambda inp, bit_depth=8: inp / (2**bit_depth)
         
-        transform = torchvision.transforms.Compose(
+        return torchvision.transforms.Compose(
                         [torchvision.transforms.ToTensor(),
                          torchvision.transforms.Lambda(normalize_zero_one)]
         )
-        return transform
-
-    # def sample_dataloader(self):
-
-    #     sample_dataloader = self.val_dataloader()
-    #     print('DATALOADER', sample_dataloader)
-
-    #     x, y = next(iter(sample_dataloader))
-    #     print(sample)
-    #     return x, y
 
     def sample_images(self):
         # Get sample reconstruction image
@@ -243,8 +173,7 @@ class CAE(pl.LightningModule):
         x_hat = self.forward(x)
         error_map = self.squared_error(x_hat, x)
 
-        #random_idx = torch.randint(0, self.p['batch_size'], (4,))
-        select = [28, 32]
+        select = [3, 33]
 
         fig, ax = plt.subplots(2, 8, figsize=(20,10))
         for view in range(2):
@@ -259,17 +188,6 @@ class CAE(pl.LightningModule):
         plt.savefig(f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/ValErrorMap_E{self.current_epoch}.png")
         del fig
 
-        # fig, ax = plt.subplots(4, 8)
-        # for view in range(4):
-        #     for c in range(2,8):
-        #     # plt.sca(ax[i])
-        #         ax[view,c].imshow(error_map[random_idx[view],c].cpu())
-        #     #ax[i].set_title('batch number ', random_idx[i])
-        #     ax[view,0].imshow(x[view,0].cpu())
-        #     ax[view,1].imshow(x_hat[view,0].cpu())
-        # plt.savefig(f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/ValErrorMap_E{self.current_epoch}.png")
-        # del fig
-
     def clean_batch_for_display(self, b: int, x, x_hat, error_map):
 
         emap = error_map[b].cpu()
@@ -277,59 +195,6 @@ class CAE(pl.LightningModule):
         maxs = torch.max(torch.max(emap, dim=1)[0], dim=1)[0]
         maxs = maxs[...,None,None]
 
-
-        # print(error_map[b].shape)
-
-        # maxs, max_idxs = torch.max(error_map[b], dim=1)
-        # maxs, max_idxs = torch.max(maxs, dim=1)
-        # print(maxs.shape)
-
         # Error map
         norm_emap = emap / maxs
-
         return norm_emap.permute(1, 2, 0)
-
-        # return emap.permute(1, 2, 0)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # vutils.save_image(recons,
-        #                   f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
-        #                   f"recons_{self.logger.name}_{self.current_epoch}.png",
-        #                   normalize=True,
-        #                   nrow=12)
-
-        # # vutils.save_image(test_input.data,
-        # #                   f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
-        # #                   f"real_img_{self.logger.name}_{self.current_epoch}.png",
-        # #                   normalize=True,
-        # #                   nrow=12)
-
-        # try:
-        #     samples = self.model.sample(144,
-        #                                 self.curr_device,
-        #                                 labels = test_label)
-        #     vutils.save_image(samples.cpu().data,
-        #                       f"{self.logger.save_dir}{self.logger.name}/version_{self.logger.version}/"
-        #                       f"{self.logger.name}_{self.current_epoch}.png",
-        #                       normalize=True,
-        #                       nrow=12)
-        # except:
-        #     pass
-
-
-        # del test_input, recons #, samples
