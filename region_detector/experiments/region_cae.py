@@ -116,9 +116,9 @@ class RegionCAE(pl.LightningModule):
             'loss': loss # Scalar
         }
 
-        # # Log some data
-        # if self.global_step == self._validation_epoch_snapshot_step:
-        #     self._handle_logging(result, session='train')
+        # Log some data
+        if self.global_step == self._validation_epoch_snapshot_step:
+            self._handle_logging(result, session='train')
 
         self.logger.experiment.add_scalar('validation_loss', loss, global_step=self.global_step)
         return result
