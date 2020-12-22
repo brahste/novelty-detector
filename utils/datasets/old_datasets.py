@@ -12,6 +12,7 @@ def squared_error(x_hat, x):
 
 class MastcamDataset(torch.utils.data.Dataset):
     '''Sub-classes dataset class for Mastcam images'''
+
     def __init__(self, path: str, transform=None, label: torch.tensor=None):
         super(MastcamDataset, self).__init__()
         
@@ -21,6 +22,7 @@ class MastcamDataset(torch.utils.data.Dataset):
         self.label = label
 
     def __len__(self):
+
         return len(self.img_files)
         
     def __getitem__(self, index):
