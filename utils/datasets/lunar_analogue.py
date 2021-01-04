@@ -49,8 +49,6 @@ class LunarAnalogueDataset(torch.utils.data.Dataset):
 
         image = io.imread(self._list_of_image_paths[idx])
 
-        # CAUTION with these transforms for now, they may not work as
-        # expected as you'll have to
         if self._transforms:
             image = self._transforms(image)
 
@@ -90,8 +88,8 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
                 train = True,
                 transforms = self._transforms
             )
-            self.num_train_samples = np.floor(len(dataset_trainval)*self._train_fraction).astype(int)
-            self.num_val_samples = np.floor(len(dataset_trainval)*self._val_fraction).astype(int)
+            # self.num_train_samples = np.floor(len(dataset_trainval)*self._train_fraction).astype(int)
+            # self.num_val_samples = np.floor(len(dataset_trainval)*self._val_fraction).astype(int)
 
             self._dataset_train, self._dataset_val = torch.utils.data.random_split(
                 dataset_trainval, 

@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import torchvision
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 from utils import tools
 
