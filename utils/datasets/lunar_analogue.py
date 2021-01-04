@@ -74,6 +74,7 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
         self._train_fraction =  self._p['hparams']['train_fraction']
         self._val_fraction = 1 - self._train_fraction
         # For now no data preparation needs to be done...
+        
         return
 
     def setup(self, stage: Optional[str]=None):
@@ -88,15 +89,13 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
                 train = True,
                 transforms = self._transforms
             )
-            # self.num_train_samples = np.floor(len(dataset_trainval)*self._train_fraction).astype(int)
-            # self.num_val_samples = np.floor(len(dataset_trainval)*self._val_fraction).astype(int)
+            self.num_train_samples = int(np.floor(len(dataset_trainval)*self._train_fraction))
+            self.num_val_samples = int(np.floor(len(dataset_trainval)*self._val_fraction))
 
             self._dataset_train, self._dataset_val = torch.utils.data.random_split(
                 dataset_trainval, 
                 [self.num_train_samples, self.num_val_samples]
             )
-            # self.dims is called when using the .shape method on a DataModule
-            self.dims = tuple(self._dataset_train[0][0].shape)
         
         if stage == 'test' or stage is None:
         # Setup testing data as well
@@ -105,7 +104,7 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
                 train = False,
                 transforms = self._transforms
             )
-            self.dims = tuple(self._dataset_test[0][0].shape)
+
         return
         
     def train_dataloader(self):

@@ -26,6 +26,7 @@ datamodule = LunarAnalogueDataModule(params)
 datamodule.prepare_data()
 datamodule.setup('fit')
 
+# Add information about the dataset to the experimental parameters
 params['num_train_samples'] = datamodule.num_train_samples
 params['num_val_samples'] = datamodule.num_val_samples
 

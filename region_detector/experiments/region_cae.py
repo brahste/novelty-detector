@@ -4,7 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import torchvision
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import numpy as np
 
 from utils import tools
 
@@ -26,6 +27,7 @@ class RegionCAE(pl.LightningModule):
         self._p = params
         # self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f'Initializing with device: {self.device}')
+        self._num_train_batches = int(self._p['num_train_samples']/self._p['hparams']['batch_size'])
 
         # Returns a callable torch.nn.XLoss object
         ##### e.g. self._loss_function = self._handle_loss_function(params['loss_function'])
@@ -70,9 +72,15 @@ class RegionCAE(pl.LightningModule):
             lr=self._p['hparams']['learning_rate']
         )
 
-    # def on_train_epoch_start(self):
-    #     random_integer = torch.randint(low=0, high=10, size=())
-    #     self._train_epoch_snapshot_step = self.global_step + random_integer
+    def on_train_epoch_start(self):
+        random_integers = torch.randint(
+            low=0, 
+            high=self._num_train_batches,
+            size=(3,)
+        )
+        self._random_train_steps = self.global_step + random_integers
+        print(f'EPOCH {self.current_epoch}' + 
+            f'Logging images from batches {self._random_train_steps.tolist()}...\n')
 
     # def on_validation_epoch_start(self):
     #     random_integer = torch.randint(low=0, high=10, size=())
@@ -88,18 +96,21 @@ class RegionCAE(pl.LightningModule):
 
         loss = self._loss_function(x_out, x_in)
 
+        images = {
+            'x_in': x_in.detach(), # Tensor
+            'x_out': x_out.detach() # Tensor
+        }
         result = {
-            'x_in': x_in, # Tensor
-            'x_out': x_out, # Tensor
-            'loss': loss # Scalar
+            'loss': loss
         }
 
-        # # Log some data
-        # if self.global_step == self._train_epoch_snapshot_step:
-        #     self._handle_logging(result, session='train')
+        # Log some data
+        if any([x == self.global_step for x in self._random_train_steps]):
+        # if self.global_step == any(self._random_train_steps):
+            self._handle_image_logging(images, session='train')
 
-        self.logger.experiment.add_scalar('training_loss', loss, global_step=self.global_step)
-        return result
+        self.log_dict(result)
+        return result # The returned object must contain a 'loss' key
 
     def validation_step(self, batch, batch_idx):
         print('Validation global step: ', self.global_step)
@@ -111,27 +122,26 @@ class RegionCAE(pl.LightningModule):
         loss = self._loss_function(x_out, x_in)
 
         result = {
-            'x_in': x_in, # Tensor
-            'x_out': x_out, # Tensor
-            'loss': loss # Scalar
+            'val_loss': loss
         }
 
-        # Log some data
-        if self.global_step == self._validation_epoch_snapshot_step:
-            self._handle_logging(result, session='train')
-
-        self.logger.experiment.add_scalar('validation_loss', loss, global_step=self.global_step)
+        self.log_dict(result)
         return result
 
-    def _handle_logging(self, result: dict, session: str='train'):
+    # def validation_epoch_end(self, validation_step_results):
+    #     for result in validation_step_results:
+    #         running_loss += 
+
+
+    def _handle_image_logging(self, images: dict, session: str='train'):
 
         compute = {
-            'x_in_01': tools.unstandardize_batch(result['x_in']),
-            'x_out_01': tools.unstandardize_batch(result['x_out']),
-            'error_map': tools.get_error_map(result['x_in'], result['x_out'])
+            'x_in_01': tools.unstandardize_batch(images['x_in']),
+            'x_out_01': tools.unstandardize_batch(images['x_out']),
+            'error_map': tools.get_error_map(images['x_in'], images['x_out'])
         }
 
-        self._log_to_tensorboard(result, compute)
+        self._log_to_tensorboard(images, compute)
         self._log_images(compute)
 
 
@@ -168,6 +178,7 @@ class RegionCAE(pl.LightningModule):
         )
     
     def _log_images(self, compute: dict):
+
         logger_save_path = os.path.join(
             self.logger.save_dir, 
             self.logger.name, 
@@ -184,7 +195,7 @@ class RegionCAE(pl.LightningModule):
                 os.path.join(
                     logger_save_path,
                     'images',
-                    f'{self.global_step}-{key}.png'
+                    f'{self.current_epoch}-{self.global_step-(self._num_train_batches*self.current_epoch)}-{key}.png'
                 )
             )
     
