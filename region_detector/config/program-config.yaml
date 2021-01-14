@@ -1,0 +1,10 @@
+Data-Format:
+  root_data_path: '/home/brahste/Datasets/LunarAnalogue'
+  glob_pattern_train: '**/.jpeg'
+  train_fraction: 0.75
+  batch_size: 8
+
+Experiment-Format:
+  experiment_name: 'RCAE'
+  log_directory: 'region_detector/logs'
+  learning_rate: 0.005
