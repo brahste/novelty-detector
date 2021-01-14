@@ -24,11 +24,12 @@ class RegionCAE(pl.LightningModule):
         super(RegionCAE, self).__init__()
 
         self.save_hyperparameters(params)
-        self._p = params
-        # self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(f'Initializing with device: {self.device}')
-        self._num_train_batches = int(self._p['num_train_samples']/self._p['hparams']['batch_size'])
+        self._learning_rate = params['Experiment-Format']['learning_rate']
+        self._num_train_samples = params['Data-Format']['num_train_samples']
+        self._batch_size = params['Data-Format']['batch_size']
+        self._num_train_batches = int(self._num_train_samples / self._batch_size)
 
+        print(f'Initializing with device: {self.device}')
         # Returns a callable torch.nn.XLoss object
         ##### e.g. self._loss_function = self._handle_loss_function(params['loss_function'])
         self._loss_function = nn.MSELoss()
@@ -69,7 +70,7 @@ class RegionCAE(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(
             self.parameters(), 
-            lr=self._p['hparams']['learning_rate']
+            lr=self._learning_rate
         )
 
     def on_train_epoch_start(self):
@@ -81,11 +82,6 @@ class RegionCAE(pl.LightningModule):
         self._random_train_steps = self.global_step + random_integers
         print(f'EPOCH {self.current_epoch}' + 
             f'Logging images from batches {self._random_train_steps.tolist()}...\n')
-
-    # def on_validation_epoch_start(self):
-    #     random_integer = torch.randint(low=0, high=10, size=())
-    #     self._validation_epoch_snapshot_step = self.global_step + random_integer
-
 
     def training_step(self, batch, batch_idx):
         print('Training global step: ', self.global_step)
@@ -127,11 +123,6 @@ class RegionCAE(pl.LightningModule):
 
         self.log_dict(result)
         return result
-
-    # def validation_epoch_end(self, validation_step_results):
-    #     for result in validation_step_results:
-    #         running_loss += 
-
 
     def _handle_image_logging(self, images: dict, session: str='train'):
 
