@@ -92,6 +92,7 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
                 train=True,
                 transforms=self._transforms
             )
+            # Calculate and save values for use in the training program
             self.num_train_samples = int(np.floor(len(dataset_trainval) * self._train_fraction))
             self.num_val_samples = int(np.floor(len(dataset_trainval) * self._val_fraction))
 
@@ -103,7 +104,7 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
         if stage == 'test' or stage is None:
             # Setup testing data as well
             self._dataset_test = LunarAnalogueDataset(
-                self._root_data_path,
+                self._data_config,
                 train=False,
                 transforms=self._transforms
             )
