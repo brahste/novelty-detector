@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from utils import tools
+from utils.datasets.lunar_analogue import LunarAnalogueDataModule
 
 
 class RegionCAE(pl.LightningModule):
@@ -23,30 +24,64 @@ class RegionCAE(pl.LightningModule):
         ):
         super(RegionCAE, self).__init__()
 
-        self.save_hyperparameters(params)
-        self._learning_rate = params['Experiment-Format']['learning_rate']
-        self._num_train_samples = params['Data-Format']['num_train_samples']
-        self._batch_size = params['Data-Format']['batch_size']
-        self._num_train_batches = int(self._num_train_samples / self._batch_size)
+        self.dm = LunarAnalogueDataModule(params)
+        self.dm.prepare_data()
+        self.dm.setup()
 
-        print(f'Initializing with device: {self.device}')
-        # Returns a callable torch.nn.XLoss object
+        # Anything set as an hparam is automatically saved, so it's a convenient
+        # way to store and use hyperparameters
+        self.hparams = params
+        if self.hparams.learning_rate is None:
+            self.learning_rate = float(0.)
+        print(f'Initializing with parameters:\n{self.hparams}\n')
+
+        # Return a callable torch.nn.XLoss object
         ##### e.g. self._loss_function = self._handle_loss_function(params['loss_function'])
         self._loss_function = nn.MSELoss()
 
         # Encoding layers
-        self.conv1 = nn.Conv2d(3, 9, 5, padding=2)
-        self.conv2 = nn.Conv2d(9, 12, 5, padding=2)
+        self.conv1_1 = nn.Conv2d(3, 64, 3, padding=1)
+        self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1, stride=2)
+        self.conv2_1 = nn.Conv2d(64, 128, 3, padding=1)
+        self.conv2_2 = nn.Conv2d(128, 128, 3, padding=1, stride=2)
+        self.conv3_1 = nn.Conv2d(128, 256, 3, padding=1)
+        self.conv3_2 = nn.Conv2d(256, 256, 3, padding=1)
+        self.conv3_3 = nn.Conv2d(256, 256, 3, padding=1, stride=2)
+        self.conv4_1 = nn.Conv2d(256, 512, 3, padding=1)
+        self.conv4_2 = nn.Conv2d(512, 512, 3, padding=1)
+        self.conv4_3 = nn.Conv2d(512, 512, 3, padding=1, stride=2)
+        self.conv5_1 = nn.Conv2d(512, 512, 3, padding=1)
+        self.conv5_2 = nn.Conv2d(512, 512, 3, padding=1)
+        self.conv5_3 = nn.Conv2d(512, 512, 3, padding=1, stride=2)
+        
         
         # Pooling layers
         self.pool = nn.MaxPool2d(2, 2)
         
         # Decoding layers
-        self.conv3 = nn.Conv2d(12,  9, 5, padding=2)
-        self.conv4 = nn.Conv2d(9, 3, 5, padding=2)
-        
+        self.conv6_3 = nn.ConvTranspose2d(512, 512, 3, padding=1)
+        self.conv6_2 = nn.ConvTranspose2d(512, 512, 3, padding=1)
+        self.conv6_1 = nn.ConvTranspose2d(512, 512, 3, padding=1, stride=2, output_padding=1)
+        self.conv7_3 = nn.ConvTranspose2d(512, 512, 3, padding=1)
+        self.conv7_2 = nn.ConvTranspose2d(512, 512, 3, padding=1)
+        self.conv7_1 = nn.ConvTranspose2d(512, 256, 3, padding=1, stride=2, output_padding=1)
+        self.conv8_3 = nn.ConvTranspose2d(256, 256, 3, padding=1)
+        self.conv8_2 = nn.ConvTranspose2d(256, 256, 3, padding=1)
+        self.conv8_1 = nn.ConvTranspose2d(256, 128, 3, padding=1, stride=2, output_padding=1)
+        self.conv9_2 = nn.ConvTranspose2d(128, 128, 3, padding=1)
+        self.conv9_1 = nn.ConvTranspose2d(128, 64, 3, padding=1, stride=2, output_padding=1)
+        self.conv10_2 = nn.ConvTranspose2d(64, 64, 3, padding=1)
+        self.conv10_1 = nn.ConvTranspose2d(64, 3, 3, padding=1, stride=2, output_padding=1)
+
         # Unpooling layers with bilinear interpolation
         self.unpool = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+
+        # Batch normalization layer
+        self.bn3 = nn.BatchNorm2d(3)
+        self.bn64 = nn.BatchNorm2d(64)
+        self.bn128 = nn.BatchNorm2d(128)
+        self.bn256 = nn.BatchNorm2d(256)
+        self.bn512 = nn.BatchNorm2d(512)
 
     def forward(self, x):
         # Simple encoding into latent representation
@@ -56,35 +91,85 @@ class RegionCAE(pl.LightningModule):
         return x_recons
 
     def encoder(self, x):
-        x = F.relu( self.conv1(x) )
-        x = self.pool(x)
-        z_latent = F.relu( self.conv2(x) )
+        # print(torch.max(x), torch.min(x), x.size())
+        x = F.relu( self.conv1_1(x) )
+        x = F.relu( self.conv1_2(x) )
+        x = self.bn64(x)
+        # x = self.pool(x)
+        x = F.relu( self.conv2_1(x) )
+        x = F.relu( self.conv2_2(x) )
+        x = self.bn128(x)
+        # x = self.pool(x)
+        x = F.relu( self.conv3_1(x) )
+        x = F.relu( self.conv3_2(x) )
+        x = F.relu( self.conv3_3(x) )
+        x = self.bn256(x)
+        # x = self.pool(x)
+        x = F.relu( self.conv4_1(x) )
+        x = F.relu( self.conv4_2(x) )
+        x = F.relu( self.conv4_3(x) )
+        x = self.bn512(x)
+        # x = self.pool(x)
+        x = F.relu( self.conv5_1(x) )
+        x = F.relu( self.conv5_2(x) )
+        x = F.relu( self.conv5_3(x) )
+        x = self.bn512(x)
+        # x = self.pool(x)
+        z_latent = x
+        # print(torch.max(x), torch.min(x), x.size())
         return z_latent
     
     def decoder(self, z):
-        z = F.relu( self.conv3(z) )
-        z = self.unpool(z)
-        x_recons = F.relu( self.conv4(z) )
+        # print(torch.max(z), torch.min(z), z.size())
+        z = F.relu( self.conv6_3(z) )
+        z = F.relu( self.conv6_2(z) )
+        z = F.relu( self.conv6_1(z) )
+        z = self.bn512(z)
+        # z = self.unpool(z)
+        z = F.relu( self.conv7_3(z) )
+        z = F.relu( self.conv7_2(z) )
+        z = F.relu( self.conv7_1(z) )
+        z = self.bn256(z)
+        # z = self.unpool(z)
+        z = F.relu( self.conv8_3(z) )
+        z = F.relu( self.conv8_2(z) )
+        z = F.relu( self.conv8_1(z) )
+        z = self.bn128(z)
+        # z = self.unpool(z)
+        z = F.relu( self.conv9_2(z) )
+        z = F.relu( self.conv9_1(z) )
+        z = self.bn64(z)
+        # z = self.unpool(z)
+        z = F.relu( self.conv10_2(z) )
+        z = F.relu( self.conv10_1(z) )
+        z = self.bn3(z)
+        # z = self.unpool(z)
+        x_recons = z
+        # print(torch.max(x_recons), torch.min(x_recons), x_recons.size())
         return x_recons
+
+    def train_dataloader(self):
+        return self.dm.train_dataloader()
+
+    def val_dataloader(self):
+        return self.dm.val_dataloader()
 
     def configure_optimizers(self):
         return torch.optim.Adam(
             self.parameters(), 
-            lr=self._learning_rate
+            lr=self.learning_rate
         )
 
-    def on_train_epoch_start(self):
+    def on_epoch_start(self):
         random_integers = torch.randint(
             low=0, 
-            high=self._num_train_batches,
+            high=self.hparams.num_train_batches,
             size=(3,)
         )
         self._random_train_steps = self.global_step + random_integers
-        print(f'EPOCH {self.current_epoch}' + 
-            f'Logging images from batches {self._random_train_steps.tolist()}...\n')
+        print(f'\nLogging images from batches: {self._random_train_steps.tolist()}\n')
 
     def training_step(self, batch, batch_idx):
-        print('Training global step: ', self.global_step)
 
         x_in = batch
         z = self.encoder(batch)
@@ -102,14 +187,12 @@ class RegionCAE(pl.LightningModule):
 
         # Log some data
         if any([x == self.global_step for x in self._random_train_steps]):
-        # if self.global_step == any(self._random_train_steps):
             self._handle_image_logging(images, session='train')
 
         self.log_dict(result)
         return result # The returned object must contain a 'loss' key
 
     def validation_step(self, batch, batch_idx):
-        print('Validation global step: ', self.global_step)
 
         x_in = batch
         z = self.encoder(batch)
@@ -126,14 +209,18 @@ class RegionCAE(pl.LightningModule):
 
     def _handle_image_logging(self, images: dict, session: str='train'):
 
-        compute = {
-            'x_in_01': tools.unstandardize_batch(images['x_in']),
-            'x_out_01': tools.unstandardize_batch(images['x_out']),
-            'error_map': tools.get_error_map(images['x_in'], images['x_out'])
-        }
+        if self.logger.version is None:
+            return
+        else:
+            compute = {
+                'x_in_01': tools.unstandardize_batch(images['x_in']),
+                'x_out_01': tools.unstandardize_batch(images['x_out']),
+                'error_map': tools.get_error_map(images['x_in'], images['x_out'])
+            }
 
-        self._log_to_tensorboard(images, compute)
-        self._log_images(compute)
+            self._log_to_tensorboard(images, compute)
+            self._log_images(compute)
+        return
 
 
     def _log_to_tensorboard(self, result: dict, compute: dict):
@@ -186,8 +273,6 @@ class RegionCAE(pl.LightningModule):
                 os.path.join(
                     logger_save_path,
                     'images',
-                    f'{self.current_epoch}-{self.global_step-(self._num_train_batches*self.current_epoch)}-{key}.png'
+                    f'{self.current_epoch}-{self.global_step-(self.hparams.num_train_batches*self.current_epoch)}-{key}.png'
                 )
             )
-    
-    

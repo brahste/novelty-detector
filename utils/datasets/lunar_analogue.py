@@ -60,11 +60,11 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
         super(LunarAnalogueDataModule, self).__init__()
 
         # Unpack just the 'Data-Format' section of the configuration
-        self._data_config = config['Data-Format']
-        self._root_data_path = self._data_config['root_data_path']
-        self._batch_size = self._data_config['batch_size']
-        self._train_fraction = self._data_config['train_fraction']
-        self._val_fraction = 1 - self._data_config['train_fraction']
+        self._config = config
+        self._root_data_path = self._config['root_data_path']
+        self._batch_size = self._config['batch_size']
+        self._train_fraction = self._config['train_fraction']
+        self._val_fraction = 1 - self._config['train_fraction']
 
         self._transforms = transforms.Compose([
             tools.PreprocessingPipeline(),
@@ -86,7 +86,7 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
         if stage == 'fit' or stage is None:
             # Setup training and validation data for use in dataloaders
             dataset_trainval = LunarAnalogueDataset(
-                self._data_config,
+                self._config,
                 train=True,
                 transforms=self._transforms
             )
@@ -102,7 +102,7 @@ class LunarAnalogueDataModule(pl.core.datamodule.LightningDataModule):
         if stage == 'test' or stage is None:
             # Setup testing data as well
             self._dataset_test = LunarAnalogueDataset(
-                self._data_config,
+                self._config,
                 train=False,
                 transforms=self._transforms
             )

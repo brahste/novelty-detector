@@ -12,7 +12,7 @@ ROOT_DATA_PATH = '/home/brahste/Datasets/LunarAnalogue/images-screened'
 def chw2hwc(x: torch.Tensor):
     return x.permute(1, 2, 0)
 
-def unstandardize_batch(batch_in: torch.Tensor, tol: float=0.001):
+def unstandardize_batch(batch_in: torch.Tensor, tol: float=0.01):
     '''
     This function is purposed for converting images pixels
     from a unit Gaussian into the range [0,1] for viewing
@@ -31,8 +31,8 @@ def unstandardize_batch(batch_in: torch.Tensor, tol: float=0.001):
         batch[b] = ( batch[b] / (2 * extremum) ) + 0.5
 
     # Some basic assertions to ensure correct range manipulation
-    assert torch.max(batch) < (1.0 + tol), 'The maximum pixel intensity is out of range'
-    assert torch.min(batch) > (0.0 - tol), 'The minimum pixel intensity is out of range'
+    assert torch.max(batch) < (1.0 + tol), f'The maximum pixel intensity ({torch.max(batch)}) is out of range'
+    assert torch.min(batch) > (0.0 - tol), f'The minimum pixel intensity ({torch.min(batch)}) is out of range'
     return batch
 
 def get_error_map(x_input, x_output, use_batch: bool=True, tol: float=0.001):
@@ -42,12 +42,10 @@ def get_error_map(x_input, x_output, use_batch: bool=True, tol: float=0.001):
     x_err = F.mse_loss(x_in, x_out, reduction='none')
 
     if len(x_in.shape) == 4:
-        print('Operating on batch')
         # Convert each image in the batch to range [0,1]
         for e in range(len(x_err)):
             x_err[e] = x_err[e] / torch.max(x_err[e])
     elif len(x_in.shape) == 3:
-        print('Operating on image')
         # Convert the single image to range [0,1]
         x_err = x_err / torch.max(x_err)
     else:
